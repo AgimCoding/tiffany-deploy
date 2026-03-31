@@ -212,6 +212,16 @@ final class AppointmentService
         $this->appointmentRepository->remove($appointment);
     }
 
+    public function findEntityById(int $id): ?Appointment
+    {
+        return $this->appointmentRepository->findById($id);
+    }
+
+    public function saveEntity(Appointment $appointment): void
+    {
+        $this->appointmentRepository->save($appointment);
+    }
+
     /**
      * Find the next available slot for a given service, scanning the next N days.
      * @return array{date: string, timeSlot: string}|null

@@ -110,6 +110,31 @@ final class PushNotificationController extends AbstractController
     }
 
     /**
+     * Admin: Get push subscription stats.
+     */
+    #[Route('/api/admin/push/stats', methods: ['GET'])]
+    public function stats(): JsonResponse
+    {
+        $subscriptions = $this->pushService->getAllSubscriptions();
+        $devices = [];
+        foreach ($subscriptions as $sub) {
+            $user = $sub->getUser();
+            $devices[] = [
+                'id' => $sub->getId(),
+                'userName' => $user ? $user->getFullName() : 'Inconnu',
+                'endpoint' => substr($sub->getEndpoint(), 0, 60) . '...',
+                'createdAt' => $sub->getCreatedAt()->format('d/m/Y H:i'),
+                'lastUsedAt' => $sub->getLastUsedAt()?->format('d/m/Y H:i'),
+            ];
+        }
+
+        return $this->json([
+            'total' => count($devices),
+            'devices' => $devices,
+        ]);
+    }
+
+    /**
      * Admin: Test push notification (send to admin only).
      */
     #[Route('/api/admin/push/test', methods: ['POST'])]

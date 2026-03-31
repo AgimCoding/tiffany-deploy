@@ -73,9 +73,19 @@ class Appointment
         return $this->user;
     }
 
+    public function setUser(User $user): void
+    {
+        $this->user = $user;
+    }
+
     public function getService(): Service
     {
         return $this->service;
+    }
+
+    public function setService(Service $service): void
+    {
+        $this->service = $service;
     }
 
     public function getDate(): \DateTimeImmutable

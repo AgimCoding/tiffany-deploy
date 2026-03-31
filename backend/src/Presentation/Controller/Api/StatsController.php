@@ -82,6 +82,61 @@ final class StatsController extends AbstractController
             'SELECT status, COUNT(*) as count FROM appointments GROUP BY status'
         );
 
+        // ─── Orders / Sales stats ───
+
+        $ordersMonth = (int) $conn->fetchOne(
+            'SELECT COUNT(*) FROM orders WHERE created_at >= ? AND created_at < ?',
+            [$monthStart, (new \DateTimeImmutable('first day of next month'))->format('Y-m-d')]
+        );
+
+        $ordersWeek = (int) $conn->fetchOne(
+            'SELECT COUNT(*) FROM orders WHERE created_at >= ? AND created_at < ?',
+            [(new \DateTimeImmutable('monday this week'))->format('Y-m-d'), (new \DateTimeImmutable('monday next week'))->format('Y-m-d')]
+        );
+
+        $salesRevenueMonth = (float) ($conn->fetchOne(
+            'SELECT COALESCE(SUM(total), 0) FROM orders WHERE created_at >= ? AND created_at < ? AND status IN (?, ?, ?)',
+            [$monthStart, (new \DateTimeImmutable('first day of next month'))->format('Y-m-d'), 'confirmed', 'ready', 'completed']
+        ) ?? 0);
+
+        $orderStatusBreakdown = $conn->fetchAllAssociative(
+            'SELECT status, COUNT(*) as count FROM orders GROUP BY status'
+        );
+
+        // Top products (last 3 months)
+        $topProducts = $conn->fetchAllAssociative(
+            'SELECT p.name, SUM(oi.quantity) as totalQty, SUM(oi.price * oi.quantity) as totalRevenue
+             FROM order_items oi
+             JOIN products p ON oi.product_id = p.id
+             JOIN orders o ON oi.order_id = o.id
+             WHERE o.created_at >= ? AND o.status != ?
+             GROUP BY p.id, p.name
+             ORDER BY totalQty DESC LIMIT 5',
+            [(new \DateTimeImmutable('-3 months'))->format('Y-m-d'), 'cancelled']
+        );
+
+        // Monthly sales (6 months)
+        $monthlySales = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $d = new \DateTimeImmutable("-{$i} months");
+            $ms = $d->modify('first day of this month')->format('Y-m-d');
+            $me = $d->modify('first day of next month')->format('Y-m-d');
+            $oCount = (int) $conn->fetchOne(
+                'SELECT COUNT(*) FROM orders WHERE created_at >= ? AND created_at < ?',
+                [$ms, $me]
+            );
+            $oRevenue = (float) ($conn->fetchOne(
+                'SELECT COALESCE(SUM(total), 0) FROM orders WHERE created_at >= ? AND created_at < ? AND status IN (?, ?, ?)',
+                [$ms, $me, 'confirmed', 'ready', 'completed']
+            ) ?? 0);
+            $monthlySales[] = [
+                'month' => $d->format('M Y'),
+                'label' => $d->format('m/Y'),
+                'orders' => $oCount,
+                'revenue' => $oRevenue,
+            ];
+        }
+
         return $this->json([
             'appointmentsWeek' => $appointmentsWeek,
             'appointmentsMonth' => $appointmentsMonth,
@@ -91,6 +146,12 @@ final class StatsController extends AbstractController
             'topServices' => $topServices,
             'monthlyStats' => $monthlyStats,
             'statusBreakdown' => $statusBreakdown,
+            'ordersWeek' => $ordersWeek,
+            'ordersMonth' => $ordersMonth,
+            'salesRevenueMonth' => $salesRevenueMonth,
+            'orderStatusBreakdown' => $orderStatusBreakdown,
+            'topProducts' => $topProducts,
+            'monthlySales' => $monthlySales,
         ]);
     }
 }

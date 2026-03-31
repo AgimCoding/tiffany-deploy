@@ -14,6 +14,10 @@ final class OrderDTO
         public readonly string $status,
         public readonly string $createdAt,
         public readonly array $items,
+        public readonly ?int $clientId = null,
+        public readonly ?string $clientName = null,
+        public readonly ?string $clientEmail = null,
+        public readonly ?string $clientPhone = null,
     ) {
     }
 
@@ -23,7 +27,9 @@ final class OrderDTO
         foreach ($order->getItems() as $item) {
             $items[] = [
                 'id' => $item->getId(),
+                'productId' => $item->getProduct()->getId(),
                 'productName' => $item->getProduct()->getName(),
+                'productImage' => $item->getProduct()->getImageUrl(),
                 'quantity' => $item->getQuantity(),
                 'price' => $item->getPrice(),
             ];
@@ -35,6 +41,10 @@ final class OrderDTO
             status: $order->getStatus(),
             createdAt: $order->getCreatedAt()->format('c'),
             items: $items,
+            clientId: $order->getUser()->getId(),
+            clientName: $order->getUser()->getFullName(),
+            clientEmail: $order->getUser()->getEmail(),
+            clientPhone: $order->getUser()->getPhone(),
         );
     }
 }

@@ -421,6 +421,14 @@ final class PushNotificationService
         ];
     }
 
+    /**
+     * @return PushSubscription[]
+     */
+    public function getAllSubscriptions(): array
+    {
+        return $this->subscriptionRepository->findAll();
+    }
+
     public function getVapidPublicKey(): ?string
     {
         return $this->settingService->get('vapid_public_key');

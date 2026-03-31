@@ -27,9 +27,20 @@ final class DoctrineOrderRepository implements OrderRepositoryInterface
         );
     }
 
+    public function findAll(): array
+    {
+        return $this->em->getRepository(Order::class)->findBy([], ['createdAt' => 'DESC']);
+    }
+
     public function save(Order $order): void
     {
         $this->em->persist($order);
+        $this->em->flush();
+    }
+
+    public function remove(Order $order): void
+    {
+        $this->em->remove($order);
         $this->em->flush();
     }
 }

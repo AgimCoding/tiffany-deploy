@@ -10,6 +10,7 @@ final class AppointmentDTO
 {
     public function __construct(
         public readonly int $id,
+        public readonly int $serviceId,
         public readonly string $serviceName,
         public readonly string $servicePrice,
         public readonly int $serviceDurationMin,
@@ -19,7 +20,9 @@ final class AppointmentDTO
         public readonly string $status,
         public readonly ?string $comment,
         public readonly ?string $finalPrice,
+        public readonly ?int $familyMemberId,
         public readonly ?string $familyMemberName,
+        public readonly int $clientId,
         public readonly string $clientName,
         public readonly string $clientEmail,
         public readonly ?string $clientPhone,
@@ -31,6 +34,7 @@ final class AppointmentDTO
     {
         return new self(
             id: $appointment->getId(),
+            serviceId: $appointment->getService()->getId(),
             serviceName: $appointment->getService()->getName(),
             servicePrice: $appointment->getService()->getPrice(),
             serviceDurationMin: $appointment->getService()->getDurationMin(),
@@ -40,7 +44,9 @@ final class AppointmentDTO
             status: $appointment->getStatus(),
             comment: $appointment->getComment(),
             finalPrice: $appointment->getFinalPrice(),
+            familyMemberId: $appointment->getFamilyMember()?->getId(),
             familyMemberName: $appointment->getFamilyMember()?->getFullName(),
+            clientId: $appointment->getUser()->getId(),
             clientName: $appointment->getUser()->getFullName(),
             clientEmail: $appointment->getUser()->getEmail(),
             clientPhone: $appointment->getUser()->getPhone(),
