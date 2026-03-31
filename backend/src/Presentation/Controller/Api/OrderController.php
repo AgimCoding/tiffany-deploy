@@ -40,6 +40,7 @@ final class OrderController extends AbstractController
                 $user->getFullName(),
                 (string) $dto->id,
                 $dto->total,
+                $dto->items,
             );
 
             // Notify admin via push
@@ -136,12 +137,21 @@ final class OrderController extends AbstractController
         try {
             $order = $this->orderService->findEntityById($id);
             if ($order) {
+                $items = [];
+                foreach ($order->getItems() as $item) {
+                    $items[] = [
+                        'productName' => $item->getProduct()->getName(),
+                        'quantity' => $item->getQuantity(),
+                        'price' => $item->getPrice(),
+                    ];
+                }
                 $this->mailerService->sendOrderStatusUpdate(
                     $order->getUser()->getEmail(),
                     $order->getUser()->getFullName(),
                     (string) $order->getId(),
                     $order->getTotal(),
                     $status,
+                    $items,
                 );
             }
         } catch (\Throwable) {

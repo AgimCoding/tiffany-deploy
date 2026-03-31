@@ -120,13 +120,14 @@ final class MailerService
         return $this->send($to, $subject, $html);
     }
 
-    public function sendOrderConfirmed(string $to, string $clientName, string $orderId, string $total): bool
+    public function sendOrderConfirmed(string $to, string $clientName, string $orderId, string $total, array $items = []): bool
     {
         $subject = 'Commande confirmée - Les Créations de Tiffany';
         $html = $this->template(
             'Commande confirmée',
             '<p>Bonjour ' . htmlspecialchars($clientName) . ',</p>
             <p>Votre commande <strong>#' . htmlspecialchars($orderId) . '</strong> a été enregistrée.</p>
+            ' . $this->orderItemsTable($items) . '
             <p style="font-size:1.2rem;font-weight:600;margin:15px 0;">Total : ' . htmlspecialchars($total) . ' €</p>
             <p>Vous pourrez récupérer votre commande au salon.</p>
             <p>Merci pour votre confiance !</p>'
@@ -135,7 +136,7 @@ final class MailerService
         return $this->send($to, $subject, $html);
     }
 
-    public function sendOrderStatusUpdate(string $to, string $clientName, string $orderId, string $total, string $status): bool
+    public function sendOrderStatusUpdate(string $to, string $clientName, string $orderId, string $total, string $status, array $items = []): bool
     {
         $statusLabels = [
             'confirmed' => 'confirmée',
@@ -157,6 +158,7 @@ final class MailerService
             'Commande #' . htmlspecialchars($orderId) . ' ' . $label,
             '<p>Bonjour ' . htmlspecialchars($clientName) . ',</p>
             <p>Votre commande <strong>#' . htmlspecialchars($orderId) . '</strong> est désormais <strong>' . $label . '</strong>.</p>
+            ' . $this->orderItemsTable($items) . '
             <p style="font-size:1.1rem;margin:15px 0;">Total : ' . htmlspecialchars($total) . ' €</p>
             ' . $extra . '
             <p>Merci pour votre confiance !</p>'
@@ -182,6 +184,37 @@ final class MailerService
         );
 
         return $this->send($to, $subject, $html);
+    }
+
+    private function orderItemsTable(array $items): string
+    {
+        if (empty($items)) {
+            return '';
+        }
+
+        $rows = '';
+        foreach ($items as $item) {
+            $name = htmlspecialchars($item['productName'] ?? '');
+            $qty = (int) ($item['quantity'] ?? 1);
+            $price = htmlspecialchars($item['price'] ?? '0');
+            $lineTotal = number_format((float) $price * $qty, 2, ',', '');
+            $rows .= '<tr>
+                <td style="padding:8px 12px;border-bottom:1px solid #eee;">' . $name . '</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center;">' . $qty . '</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">' . $price . ' €</td>
+                <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right;">' . $lineTotal . ' €</td>
+            </tr>';
+        }
+
+        return '<table style="width:100%;border-collapse:collapse;margin:15px 0;">
+            <tr style="background:#f9f9f9;">
+                <th style="padding:8px 12px;text-align:left;border-bottom:2px solid #b8860b;font-size:0.85rem;color:#888;">Produit</th>
+                <th style="padding:8px 12px;text-align:center;border-bottom:2px solid #b8860b;font-size:0.85rem;color:#888;">Qté</th>
+                <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #b8860b;font-size:0.85rem;color:#888;">Prix unit.</th>
+                <th style="padding:8px 12px;text-align:right;border-bottom:2px solid #b8860b;font-size:0.85rem;color:#888;">Sous-total</th>
+            </tr>
+            ' . $rows . '
+        </table>';
     }
 
     private function template(string $title, string $content): string
