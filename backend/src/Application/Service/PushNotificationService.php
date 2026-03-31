@@ -55,6 +55,16 @@ final class PushNotificationService
     }
 
     /**
+     * Send with debug info for admin test.
+     * @return array{sent: int, total: int, errors: string[]}
+     */
+    public function sendToUserWithDebug(int $userId, string $title, string $body, string $url = '/', string $tag = ''): array
+    {
+        $subscriptions = $this->subscriptionRepository->findByUserId($userId);
+        return $this->sendToSubscriptionsDebug($subscriptions, $title, $body, $url, $tag);
+    }
+
+    /**
      * Send push notification to all subscribed users.
      */
     public function sendToAll(string $title, string $body, string $url = '/', string $tag = ''): int
@@ -70,7 +80,8 @@ final class PushNotificationService
     {
         $vapidPublic = $this->settingService->get('vapid_public_key');
         $vapidPrivate = $this->settingService->get('vapid_private_key');
-        $vapidSubject = $this->settingService->get('admin_email') ?: 'mailto:contact@tiffany-creations.be';
+        $adminEmail = $this->settingService->get('admin_email') ?: 'contact@tiffany-creations.be';
+        $vapidSubject = str_starts_with($adminEmail, 'mailto:') ? $adminEmail : 'mailto:' . $adminEmail;
 
         if (!$vapidPublic || !$vapidPrivate) {
             return 0;
@@ -119,6 +130,68 @@ final class PushNotificationService
         }
 
         return $sent;
+    }
+
+    /**
+     * @param PushSubscription[] $subscriptions
+     * @return array{sent: int, total: int, errors: string[]}
+     */
+    private function sendToSubscriptionsDebug(array $subscriptions, string $title, string $body, string $url, string $tag): array
+    {
+        $errors = [];
+        $total = count($subscriptions);
+
+        if ($total === 0) {
+            return ['sent' => 0, 'total' => 0, 'errors' => ['Aucune subscription trouvee']];
+        }
+
+        $vapidPublic = $this->settingService->get('vapid_public_key');
+        $vapidPrivate = $this->settingService->get('vapid_private_key');
+        $adminEmail = $this->settingService->get('admin_email') ?: 'contact@tiffany-creations.be';
+        $vapidSubject = str_starts_with($adminEmail, 'mailto:') ? $adminEmail : 'mailto:' . $adminEmail;
+
+        if (!$vapidPublic || !$vapidPrivate) {
+            return ['sent' => 0, 'total' => $total, 'errors' => ['Cles VAPID non configurees']];
+        }
+
+        $payload = json_encode([
+            'title' => $title,
+            'body' => $body,
+            'url' => $url,
+            'tag' => $tag ?: 'tiffany-' . time(),
+            'icon' => '/icon-192.svg',
+            'badge' => '/icon-192.svg',
+        ], JSON_UNESCAPED_UNICODE);
+
+        $sent = 0;
+
+        foreach ($subscriptions as $subscription) {
+            try {
+                $result = $this->sendWebPush(
+                    $subscription->getEndpoint(),
+                    $subscription->getPublicKey(),
+                    $subscription->getAuthToken(),
+                    $payload,
+                    $vapidPublic,
+                    $vapidPrivate,
+                    $vapidSubject,
+                );
+
+                if ($result === true) {
+                    $subscription->markUsed();
+                    $this->subscriptionRepository->save($subscription);
+                    $sent++;
+                } elseif ($result === false) {
+                    $errors[] = 'Subscription expiree (endpoint: ...' . substr($subscription->getEndpoint(), -30) . ')';
+                } else {
+                    $errors[] = 'Erreur inconnue (endpoint: ...' . substr($subscription->getEndpoint(), -30) . ')';
+                }
+            } catch (\Throwable $e) {
+                $errors[] = $e->getMessage();
+            }
+        }
+
+        return ['sent' => $sent, 'total' => $total, 'errors' => $errors];
     }
 
     /**

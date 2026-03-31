@@ -143,7 +143,17 @@ final class PushNotificationController extends AbstractController
         /** @var User $user */
         $user = $this->getUser();
 
-        $sent = $this->pushService->sendToUser(
+        // Check VAPID keys first
+        $vapidKey = $this->pushService->getVapidPublicKey();
+        if (!$vapidKey) {
+            return $this->json([
+                'success' => false,
+                'sent' => 0,
+                'message' => 'Cles VAPID non configurees. Generez-les d\'abord.',
+            ]);
+        }
+
+        $result = $this->pushService->sendToUserWithDebug(
             $user->getId(),
             'Test notification',
             'Les notifications push fonctionnent correctement !',
@@ -151,10 +161,18 @@ final class PushNotificationController extends AbstractController
             'test-push',
         );
 
+        $sent = $result['sent'];
+        $message = match (true) {
+            $sent > 0 => "Notification de test envoyee sur {$sent} appareil(s).",
+            $result['total'] === 0 => 'Aucun appareil enregistre pour votre compte.',
+            default => "Echec d'envoi sur {$result['total']} appareil(s). Erreurs: " . implode(', ', $result['errors']),
+        };
+
         return $this->json([
             'success' => $sent > 0,
             'sent' => $sent,
-            'message' => $sent > 0 ? 'Notification de test envoyée.' : 'Aucun appareil enregistré.',
+            'total' => $result['total'],
+            'message' => $message,
         ]);
     }
 }
