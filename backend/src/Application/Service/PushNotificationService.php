@@ -167,7 +167,7 @@ final class PushNotificationService
 
         foreach ($subscriptions as $subscription) {
             try {
-                $result = $this->sendWebPush(
+                $result = $this->sendWebPushDebug(
                     $subscription->getEndpoint(),
                     $subscription->getPublicKey(),
                     $subscription->getAuthToken(),
@@ -177,14 +177,14 @@ final class PushNotificationService
                     $vapidSubject,
                 );
 
-                if ($result === true) {
+                if ($result['success'] === true) {
                     $subscription->markUsed();
                     $this->subscriptionRepository->save($subscription);
                     $sent++;
-                } elseif ($result === false) {
-                    $errors[] = 'Subscription expiree (endpoint: ...' . substr($subscription->getEndpoint(), -30) . ')';
+                } elseif ($result['expired']) {
+                    $errors[] = "Subscription expiree (HTTP {$result['httpCode']})";
                 } else {
-                    $errors[] = 'Erreur inconnue (endpoint: ...' . substr($subscription->getEndpoint(), -30) . ')';
+                    $errors[] = "HTTP {$result['httpCode']}: {$result['body']} (curl: {$result['curlError']})";
                 }
             } catch (\Throwable $e) {
                 $errors[] = $e->getMessage();
@@ -251,6 +251,59 @@ final class PushNotificationService
         }
 
         return null; // Other error, don't delete subscription
+    }
+
+    /**
+     * Debug version of sendWebPush that returns detailed error info.
+     */
+    private function sendWebPushDebug(
+        string $endpoint,
+        string $userPublicKey,
+        string $userAuthToken,
+        string $payload,
+        string $vapidPublicKey,
+        string $vapidPrivateKey,
+        string $vapidSubject,
+    ): array {
+        $vapidHeaders = $this->createVapidHeaders($endpoint, $vapidPublicKey, $vapidPrivateKey, $vapidSubject);
+
+        $encrypted = $this->encryptPayload($payload, $userPublicKey, $userAuthToken);
+        if ($encrypted === null) {
+            return ['success' => null, 'expired' => false, 'httpCode' => 0, 'body' => 'Encryption failed', 'curlError' => ''];
+        }
+
+        $headers = [
+            'Content-Type: application/octet-stream',
+            'Content-Encoding: aes128gcm',
+            'Content-Length: ' . strlen($encrypted['cipherText']),
+            'TTL: 2419200',
+            'Urgency: high',
+            'Topic: ' . substr(md5($payload), 0, 32),
+            'Authorization: vapid t=' . $vapidHeaders['token'] . ', k=' . $vapidHeaders['key'],
+        ];
+
+        $ch = curl_init($endpoint);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $encrypted['cipherText'],
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+
+        $body = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        return [
+            'success' => $httpCode >= 200 && $httpCode < 300,
+            'expired' => $httpCode === 404 || $httpCode === 410,
+            'httpCode' => $httpCode,
+            'body' => substr((string) $body, 0, 200),
+            'curlError' => $curlError,
+        ];
     }
 
     private function createVapidHeaders(string $endpoint, string $publicKey, string $privateKey, string $subject): array
