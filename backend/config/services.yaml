@@ -50,3 +50,9 @@ services:
 
     App\Domain\Port\PushSubscriptionRepositoryInterface:
         class: App\Infrastructure\Persistence\Doctrine\Repository\DoctrinePushSubscriptionRepository
+
+    App\Domain\Port\GiftCardRepositoryInterface:
+        class: App\Infrastructure\Persistence\Doctrine\Repository\DoctrineGiftCardRepository
+
+    App\Domain\Port\WaitlistRepositoryInterface:
+        class: App\Infrastructure\Persistence\Doctrine\Repository\DoctrineWaitlistRepository
