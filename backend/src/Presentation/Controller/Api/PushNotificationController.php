@@ -153,20 +153,30 @@ final class PushNotificationController extends AbstractController
             ]);
         }
 
-        $result = $this->pushService->sendToUserWithDebug(
-            $user->getId(),
-            'Test notification',
-            'Les notifications push fonctionnent correctement !',
-            '/',
-            'test-push',
-        );
+        try {
+            $result = $this->pushService->sendToUserWithDebug(
+                $user->getId(),
+                'Test notification',
+                'Les notifications push fonctionnent correctement !',
+                '/',
+                'test-push',
+            );
+        } catch (\Throwable $e) {
+            return $this->json([
+                'success' => false,
+                'sent' => 0,
+                'message' => 'Erreur: ' . $e->getMessage(),
+            ]);
+        }
 
         $sent = $result['sent'];
-        $message = match (true) {
-            $sent > 0 => "Notification de test envoyee sur {$sent} appareil(s).",
-            $result['total'] === 0 => 'Aucun appareil enregistre pour votre compte.',
-            default => "Echec d'envoi sur {$result['total']} appareil(s). Erreurs: " . implode(', ', $result['errors']),
-        };
+        if ($sent > 0) {
+            $message = "Notification de test envoyee sur {$sent} appareil(s).";
+        } elseif ($result['total'] === 0) {
+            $message = 'Aucun appareil enregistre pour votre compte.';
+        } else {
+            $message = "Echec d'envoi sur {$result['total']} appareil(s). Erreurs: " . implode(', ', $result['errors']);
+        }
 
         return $this->json([
             'success' => $sent > 0,
