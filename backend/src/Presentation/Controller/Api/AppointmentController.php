@@ -272,7 +272,20 @@ final class AppointmentController extends AbstractController
         try {
             $dto = $this->appointmentService->confirm($id);
             $this->adminLogService->log($this->getUser(), 'confirm', 'appointment', $id, "RDV #{$id} confirmé");
+
+            // Email + Push client
+            $dateFR = (new \DateTimeImmutable($dto->date))->format('d/m/Y');
+            try {
+                $this->mailerService->sendAppointmentConfirmed(
+                    $dto->clientEmail,
+                    $dto->clientName,
+                    $dto->serviceName,
+                    $dateFR,
+                    $dto->timeSlot,
+                );
+            } catch (\Throwable) {}
             $this->sendAppointmentPush($dto, 'confirm');
+
             return $this->json($dto);
         } catch (\DomainException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_NOT_FOUND);
@@ -287,7 +300,26 @@ final class AppointmentController extends AbstractController
         try {
             $dto = $this->appointmentService->complete($id, $data['finalPrice']);
             $this->adminLogService->log($this->getUser(), 'complete', 'appointment', $id, "RDV #{$id} terminé ({$data['finalPrice']}€)");
+
+            // Email + Push client
+            try {
+                $dateFR = (new \DateTimeImmutable($dto->date))->format('d/m/Y');
+                $this->mailerService->send(
+                    $dto->clientEmail,
+                    'Merci pour votre visite !',
+                    $this->mailerService->template(
+                        'Rendez-vous termine',
+                        sprintf(
+                            '<p>Bonjour %s,</p><p>Votre rendez-vous <strong>%s</strong> du %s est termine.</p><p>Merci pour votre confiance ! N\'hesitez pas a reprendre rendez-vous.</p><p style="margin-top:20px;"><a href="https://tiffany.garagepro.be/#reservation" style="background:#b8860b;color:#fff;padding:12px 30px;text-decoration:none;border-radius:5px;">REPRENDRE RENDEZ-VOUS</a></p>',
+                            $dto->clientName,
+                            $dto->serviceName,
+                            $dateFR,
+                        ),
+                    ),
+                );
+            } catch (\Throwable) {}
             $this->sendAppointmentPush($dto, 'complete');
+
             return $this->json($dto);
         } catch (\DomainException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_NOT_FOUND);
@@ -298,13 +330,13 @@ final class AppointmentController extends AbstractController
     public function cancel(int $id, Request $request): JsonResponse
     {
         $data = json_decode($request->getContent(), true) ?? [];
-        $sendEmail = $data['sendEmail'] ?? false;
 
         try {
             $dto = $this->appointmentService->cancel($id);
 
-            if ($sendEmail) {
-                $dateFR = (new \DateTimeImmutable($dto->date))->format('d/m/Y');
+            // Always send email + push to client on cancellation
+            $dateFR = (new \DateTimeImmutable($dto->date))->format('d/m/Y');
+            try {
                 $this->mailerService->sendAppointmentCancelled(
                     $dto->clientEmail,
                     $dto->clientName,
@@ -312,7 +344,7 @@ final class AppointmentController extends AbstractController
                     $dateFR,
                     $dto->timeSlot,
                 );
-            }
+            } catch (\Throwable) {}
 
             $this->adminLogService->log($this->getUser(), 'cancel', 'appointment', $id, "RDV #{$id} annulé");
             $this->sendAppointmentPush($dto, 'cancel');

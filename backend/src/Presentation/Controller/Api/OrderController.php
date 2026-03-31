@@ -108,6 +108,8 @@ final class OrderController extends AbstractController
     {
         try {
             $dto = $this->orderService->complete($id);
+            $this->sendOrderEmail($id, 'completed');
+            $this->sendOrderPush($id, 'completed');
             $this->adminLogService->log($this->getUser(), 'complete', 'order', $id, "Commande #{$id} livrée");
             return $this->json($dto);
         } catch (\DomainException $e) {

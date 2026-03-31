@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Presentation\Command;
 
 use App\Application\Service\MailerService;
+use App\Application\Service\PushNotificationService;
 use App\Domain\Port\AppointmentRepositoryInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -21,6 +22,7 @@ final class SendEmailRemindersCommand extends Command
     public function __construct(
         private readonly AppointmentRepositoryInterface $appointmentRepository,
         private readonly MailerService $mailerService,
+        private readonly PushNotificationService $pushService,
     ) {
         parent::__construct();
     }
@@ -54,9 +56,20 @@ final class SendEmailRemindersCommand extends Command
                 $appointment->getTimeSlot(),
             );
 
+            // Send push notification reminder
+            try {
+                $this->pushService->sendToUser(
+                    $appointment->getUser()->getId(),
+                    'Rappel RDV demain',
+                    sprintf('Votre RDV %s est demain à %s.', $appointment->getService()->getName(), $appointment->getTimeSlot()),
+                    '/',
+                    'reminder-' . $appointment->getId(),
+                );
+            } catch (\Throwable) {}
+
             if ($ok) {
                 $sent++;
-                $io->writeln(sprintf('Email sent to %s for %s at %s', $email, $appointment->getService()->getName(), $appointment->getTimeSlot()));
+                $io->writeln(sprintf('Email + push sent to %s for %s at %s', $email, $appointment->getService()->getName(), $appointment->getTimeSlot()));
             } else {
                 $skipped++;
                 $io->warning(sprintf('Failed to send email to %s', $email));
