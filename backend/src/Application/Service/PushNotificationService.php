@@ -267,9 +267,9 @@ final class PushNotificationService
     ): array {
         $vapidHeaders = $this->createVapidHeaders($endpoint, $vapidPublicKey, $vapidPrivateKey, $vapidSubject);
 
-        $encrypted = $this->encryptPayload($payload, $userPublicKey, $userAuthToken);
-        if ($encrypted === null) {
-            return ['success' => null, 'expired' => false, 'httpCode' => 0, 'body' => 'Encryption failed', 'curlError' => ''];
+        $encrypted = $this->encryptPayloadDebug($payload, $userPublicKey, $userAuthToken);
+        if (isset($encrypted['error'])) {
+            return ['success' => null, 'expired' => false, 'httpCode' => 0, 'body' => $encrypted['error'], 'curlError' => ''];
         }
 
         $headers = [
@@ -338,6 +338,49 @@ final class PushNotificationService
             'token' => $jwt,
             'key' => $publicKey,
         ];
+    }
+
+    private function encryptPayloadDebug(string $payload, string $userPublicKeyB64, string $userAuthB64): array
+    {
+        $userPublicKey = $this->base64UrlDecode($userPublicKeyB64);
+        $userAuth = $this->base64UrlDecode($userAuthB64);
+
+        if (strlen($userPublicKey) !== 65 || strlen($userAuth) !== 16) {
+            return ['error' => 'Invalid key lengths: pubKey=' . strlen($userPublicKey) . ' (need 65), auth=' . strlen($userAuth) . ' (need 16). Raw b64: pubKey=' . strlen($userPublicKeyB64) . ' auth=' . strlen($userAuthB64)];
+        }
+
+        $localKey = openssl_pkey_new([
+            'curve_name' => 'prime256v1',
+            'private_key_type' => OPENSSL_KEYTYPE_EC,
+        ]);
+        if (!$localKey) {
+            return ['error' => 'openssl_pkey_new failed: ' . openssl_error_string()];
+        }
+
+        $localKeyDetails = openssl_pkey_get_details($localKey);
+        $localPublicKey = $this->getUncompressedPublicKey($localKeyDetails);
+
+        $sharedSecret = $this->computeEcdhSecret($localKey, $userPublicKey);
+        if ($sharedSecret === null) {
+            return ['error' => 'ECDH shared secret failed: ' . openssl_error_string()];
+        }
+
+        $ikm = $this->hkdf($sharedSecret, $userAuth, "WebPush: info\x00" . $userPublicKey . $localPublicKey, 32);
+        $salt = random_bytes(16);
+        $cek = $this->hkdf($ikm, $salt, "Content-Encoding: aes128gcm\x00", 16);
+        $nonce = $this->hkdf($ikm, $salt, "Content-Encoding: nonce\x00", 12);
+        $paddedPayload = $payload . "\x02";
+
+        $tag = '';
+        $encrypted = openssl_encrypt($paddedPayload, 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, $tag, '', 16);
+        if ($encrypted === false) {
+            return ['error' => 'AES-GCM encrypt failed: ' . openssl_error_string()];
+        }
+
+        $recordSize = pack('N', 4096);
+        $header = $salt . $recordSize . chr(65) . $localPublicKey;
+
+        return ['cipherText' => $header . $encrypted . $tag];
     }
 
     private function encryptPayload(string $payload, string $userPublicKeyB64, string $userAuthB64): ?array
