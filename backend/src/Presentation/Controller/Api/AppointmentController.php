@@ -173,6 +173,16 @@ final class AppointmentController extends AbstractController
                 );
             }
 
+            // Notify admin via push
+            try {
+                $this->pushService->sendToAdmins(
+                    'Nouveau RDV',
+                    sprintf('%s - %s le %s a %s', $user->getFullName(), $dto->serviceName, $dateFR, $dto->timeSlot),
+                    '/#admin',
+                    'new-appointment-' . $dto->id,
+                );
+            } catch (\Throwable) {}
+
             return $this->json($dto, Response::HTTP_CREATED);
         } catch (\DomainException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
@@ -209,6 +219,17 @@ final class AppointmentController extends AbstractController
             }
 
             $this->appointmentService->cancel($id);
+
+            // Notify admin via push
+            try {
+                $dateFR = (new \DateTimeImmutable($dto->date))->format('d/m/Y');
+                $this->pushService->sendToAdmins(
+                    'RDV annule par client',
+                    sprintf('%s a annule son RDV du %s a %s (%s)', $user->getFullName(), $dateFR, $dto->timeSlot, $dto->serviceName),
+                    '/#admin',
+                    'cancel-appointment-' . $id,
+                );
+            } catch (\Throwable) {}
 
             return $this->json(['success' => true, 'message' => 'Rendez-vous annulé.']);
         } catch (\DomainException $e) {

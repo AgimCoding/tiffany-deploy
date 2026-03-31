@@ -42,6 +42,16 @@ final class OrderController extends AbstractController
                 $dto->total,
             );
 
+            // Notify admin via push
+            try {
+                $this->pushService->sendToAdmins(
+                    'Nouvelle commande',
+                    sprintf('%s - Commande #%d (%s EUR)', $user->getFullName(), $dto->id, $dto->total),
+                    '/#admin',
+                    'new-order-' . $dto->id,
+                );
+            } catch (\Throwable) {}
+
             return $this->json($dto, Response::HTTP_CREATED);
         } catch (\DomainException $e) {
             return $this->json(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);

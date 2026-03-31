@@ -7,6 +7,7 @@ namespace App\Application\Service;
 use App\Domain\Entity\PushSubscription;
 use App\Domain\Entity\User;
 use App\Domain\Port\PushSubscriptionRepositoryInterface;
+use App\Domain\Port\UserRepositoryInterface;
 use Minishlink\WebPush\Subscription;
 use Minishlink\WebPush\WebPush;
 use Minishlink\WebPush\VAPID;
@@ -16,6 +17,7 @@ final class PushNotificationService
     public function __construct(
         private readonly PushSubscriptionRepositoryInterface $subscriptionRepository,
         private readonly SiteSettingService $settingService,
+        private readonly UserRepositoryInterface $userRepository,
     ) {
     }
 
@@ -61,6 +63,25 @@ final class PushNotificationService
     {
         $subscriptions = $this->subscriptionRepository->findByUserId($userId);
         return $this->doSend($subscriptions, $title, $body, $url, $tag);
+    }
+
+    /**
+     * Send push notification to all admin users.
+     */
+    public function sendToAdmins(string $title, string $body, string $url = '/', string $tag = ''): int
+    {
+        $admins = $this->userRepository->findAll();
+        $subscriptions = [];
+        foreach ($admins as $admin) {
+            if (in_array('ROLE_ADMIN', $admin->getRoles())) {
+                $subs = $this->subscriptionRepository->findByUserId($admin->getId());
+                foreach ($subs as $sub) {
+                    $subscriptions[] = $sub;
+                }
+            }
+        }
+        $result = $this->doSend($subscriptions, $title, $body, $url, $tag);
+        return $result['sent'];
     }
 
     public function sendToAll(string $title, string $body, string $url = '/', string $tag = ''): int
